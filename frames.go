@@ -6,12 +6,14 @@ import (
 
 // A Frame is a finite sequence of bytes.
 //
-// Rather than storing the entire array of bytes in memory as such, this
-// interface allows a byte array to be effectively constructed, on demand, into
-// a buffer where it may be concatenated with any number of other frames before
-// being sent all at once.
+// Rather than storing an entire array of bytes in memory as such, this
+// interface allows an array of bytes to be constructed on demand in a buffer
+// where it may be adjacent to any number of other frames, ready to be sent all
+// at once.
 //
 // Zero-length frames are valid.
+//
+// Frames that return a negative value from Len() have undefined consequences.
 //
 type Frame interface {
 	Len() int // number of bytes that will be written
@@ -50,8 +52,8 @@ type callback struct {
 	C     chan<- Wrote
 }
 
-// Callback wraps f so that when it is written to an underlying io.Writer the
-// results of the io.Writer.Write() call to be sent back on ch.
+// Callback wraps f so that when it is written to the underlying io.Writer of a
+// fio.Writer the result of that io.Writer.Write() call will be sent back on ch.
 //
 func Callback(f Frame, c chan<- Wrote) Frame {
 	return &callback{
