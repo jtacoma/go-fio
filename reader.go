@@ -13,7 +13,11 @@ type reader struct {
 // from the underlying reader or returns an error.
 //
 func NewReader(r io.Reader) io.Reader {
-	return &reader{r}
+	if _, already := r.(*reader); already {
+		return r
+	} else {
+		return &reader{r}
+	}
 }
 
 func (r *reader) Read(buf []byte) (int, error) {
