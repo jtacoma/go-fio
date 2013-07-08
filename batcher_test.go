@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-type maxlengthWriter struct {
+type testWriter struct {
 	Buffer     bytes.Buffer
 	MaxLength  int
 	WriteCount int
@@ -18,9 +18,13 @@ type maxlengthWriter struct {
 
 var maxlengthExceeded = errors.New("maximum buffer length exceeded")
 
-func (b *maxlengthWriter) Write(p []byte) (n int, err error) {
+func (b *testWriter) Write(p []byte) (n int, err error) {
 	b.WriteCount += 1
-	n = int(math.Min(float64(b.MaxLength), float64(b.Buffer.Len()+len(p)))) - b.Buffer.Len()
+	if(b.MaxLength>=0){
+		n = int(math.Min(float64(b.MaxLength), float64(b.Buffer.Len()+len(p)))) - b.Buffer.Len()
+	}else{
+		n=len(p)
+	}
 	if n, err = b.Buffer.Write(p[:n]); err == nil && n < len(p) {
 		err = maxlengthExceeded
 	}
@@ -45,7 +49,7 @@ func TestBatcher(t *testing.T) {
 			frames = append(frames, Callback(s, written))
 		}
 		totalbytes := 0
-		writer := &maxlengthWriter{MaxLength: test.Limit}
+		writer := &testWriter{MaxLength: test.Limit}
 		unit := batcher{Writer: writer}
 		for _, f := range frames {
 			totalbytes += f.Len()
@@ -103,7 +107,7 @@ func TestBatcher_Consume(t *testing.T) {
 		var (
 			ch         = make(chan Frame, len(test.Frames))
 			written    = make(chan Wrote, len(test.Frames))
-			writer     = &maxlengthWriter{MaxLength: test.Limit}
+			writer     = &testWriter{MaxLength: test.Limit}
 			unit       = batcher{Writer: writer}
 			sent       []Frame
 			totalbytes int
@@ -140,30 +144,37 @@ func TestBatcher_Consume(t *testing.T) {
 
 var batchWriteTests = []struct {
 	Frames []string
-	Reps   int
+	Sets   []int
 	Limit  int
+	Performance float64
 }{
-	{[]string{"test"}, 1, 5},
-	{[]string{"test"}, 2, 15},
-	{[]string{"1", "2", "3", "4"}, 10, 80},
+	{[]string{"test"}, []int{1}, 5, 1.0},
+	{[]string{"test"}, []int{2}, 15, 1.0},
+	{[]string{"1", "2", "3", "4"}, []int{10,10,10,10}, 80, 40.0},
 }
 
-func TestBatchWriter_Write(t *testing.T) {
+func TestBufferedWriter_Write(t *testing.T) {
 	for itest, test := range batchWriteTests {
-		writer := maxlengthWriter{MaxLength: test.Limit}
-		unit := Writer(&writer)
+		writer := testWriter{MaxLength: -1}
+		unit := NewBufferedWriter(&writer)
 		var expected string
+		var totalcount int
 		var wg sync.WaitGroup
-		for i := 0; i < test.Reps; i += 1 {
-			for _, s := range test.Frames {
-				expected += s
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					if _, err := unit.Write([]byte(s)); err != nil {
-						t.Errorf("%d: write returned error: %s", itest, err.Error())
-					}
-				}()
+		for iset, reps:=range(test.Sets){
+			wait:=time.Duration( iset*50)*time.Millisecond
+			for i := 0; i < reps; i += 1 {
+				for _, s := range test.Frames {
+					expected += s
+					totalcount +=1
+					wg.Add(1)
+					go func() {
+						defer wg.Done()
+						time.Sleep(wait)
+						if _, err := unit.Write([]byte(s)); err != nil {
+							t.Errorf("%d: write returned error: %s", itest, err.Error())
+						}
+					}()
+				}
 			}
 		}
 		wg.Wait()
@@ -171,8 +182,9 @@ func TestBatchWriter_Write(t *testing.T) {
 		if len(actual) != len(expected) {
 			t.Errorf("%d: expected length %d, got %v", itest, len(expected), actual)
 		}
-		if writer.WriteCount != 1 && writer.WriteCount == test.Reps*len(test.Frames) {
-			t.Errorf("%d: writer.WriteCount is exactly %d", itest, writer.WriteCount)
+		performance:=float64(totalcount)/ float64(writer.WriteCount)
+		if performance<test.Performance{
+			t.Errorf("%d: averaged %f frames per write but expected %f", itest, performance, test.Performance)
 		}
 	}
 }

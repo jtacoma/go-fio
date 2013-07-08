@@ -4,33 +4,30 @@ import (
 	"io"
 )
 
-type batchWriter struct {
-	ch chan Frame
-}
+type BufferedWriter chan Frame
 
-func Writer(w io.Writer) io.WriteCloser {
+func NewBufferedWriter(w io.Writer) BufferedWriter {
 	var (
-		b      = batcher{Writer: w}
-		ch     = make(chan Frame)
-		result = batchWriter{ch: ch}
+		back      = batcher{Writer: w}
+		front=make(BufferedWriter)
 	)
 	go func() {
 		// Passing -1 here causes Consume() to wait forever (for either a
 		// message or the closing of the channel).
-		for b.Consume(ch, -1) == nil {
+		for back.Consume(front, -1) == nil {
 		}
 	}()
-	return &result
+	return front
 }
 
-func (w *batchWriter) Write(p []byte) (int, error) {
+func (w BufferedWriter) Write(p []byte) (int, error) {
 	ch := make(chan Wrote)
-	w.ch <- Callback(FrameBytes(p), ch)
+	w <- Callback(FrameBytes(p), ch)
 	wrote := <-ch
 	return wrote.N, wrote.Err
 }
 
-func (w *batchWriter) Close() error {
-	close(w.ch)
+func (w BufferedWriter) Close() error {
+	close(w)
 	return nil
 }
