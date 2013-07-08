@@ -29,10 +29,8 @@ type buffer struct {
 	raw     bytes.Buffer
 }
 
-func (b *buffer) delay(f Frame) error {
-	if err := f.WriteTo(&b.raw); err != nil {
-		return err
-	}
+func (b *buffer) delay(f Frame) (err error) {
+	b.raw.ReadFrom(f) // TODO: ensure this is not doing extra copying
 	b.frames = append(b.frames, f)
 	b.indices = append(b.indices, b.raw.Len())
 	return nil

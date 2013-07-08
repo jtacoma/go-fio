@@ -32,8 +32,8 @@ import (
 // Frames that return a negative value from Len() have undefined consequences.
 //
 type Frame interface {
-	Len() int // number of bytes that will be written
-	WriteTo(w io.Writer) error
+	Len() int
+	Read(buf []byte) (int, error)
 }
 
 // Wrote represents the results of a call to io.Writer.Write().
@@ -48,9 +48,15 @@ type Wrote struct {
 type BytesFrame []byte
 
 func (f BytesFrame) Len() int { return len(f) }
-func (f BytesFrame) WriteTo(w io.Writer) error {
-	_, err := w.Write(f)
-	return err
+
+func (f BytesFrame) Read(buf []byte) (n int, err error) {
+	n = copy(buf, f)
+	if n == len(f) {
+		err = io.EOF
+	} else {
+		panic("buffer is too small")
+	}
+	return
 }
 
 // StringFrame represents a string as a Frame.
@@ -58,9 +64,14 @@ func (f BytesFrame) WriteTo(w io.Writer) error {
 type StringFrame string
 
 func (f StringFrame) Len() int { return len([]byte(f)) }
-func (f StringFrame) WriteTo(w io.Writer) error {
-	_, err := w.Write([]byte(f))
-	return err
+func (f StringFrame) Read(buf []byte) (n int, err error) {
+	n = copy(buf, f)
+	if n == len(f) {
+		err = io.EOF
+	} else {
+		panic("buffer is too small")
+	}
+	return
 }
 
 type callback struct {
@@ -77,5 +88,5 @@ func Callback(f Frame, c chan<- Wrote) Frame {
 		C:     c,
 	}
 }
-func (f *callback) Len() int                  { return f.inner.Len() }
-func (f *callback) WriteTo(w io.Writer) error { return f.inner.WriteTo(w) }
+func (f *callback) Len() int                   { return f.inner.Len() }
+func (f *callback) Read(p []byte) (int, error) { return f.inner.Read(p) }
