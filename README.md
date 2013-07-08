@@ -3,9 +3,24 @@ fio
 
     go get github.com/jtacoma/go-fio
 
-This is an experiment in easing the development of custom protocols through a simple abstraction over the standard "io" package.
+This is an experiment in easing the development of custom protocols through a framing abstraction over the standard "io" package.
 
-Coincidentally, it also provides easy efficiency for high-frequency writing.
+Coincidentally, this package also provides easy efficiency for high-frequency writing.  For example, the following code will result in a small number of large writes to `sys.Stdout` even though it makes a large number of small writes to `w`:
+
+    func main() {
+        w := fio.NewWriter(sys.Stdout)
+        for i := 0; i < 1000; i += 1 {
+            w.Write([]byte("Hello, World!\n"))
+        }
+    }
+
+There are also some abstractions over the standard `"net"` package in the `"fionet"` subdirectory.
+
+Plan
+----
+
+* Use this package to develop some custom protocols (or implementations of published protocols).
+* Increase test coverate with `gocov`.  It should be possible to hit 100% or very close to it.
 
 License
 -------
