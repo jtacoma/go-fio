@@ -27,13 +27,15 @@ type batchWriter struct {
 	ch chan CallbackMessage
 }
 
-func BatchWriter(w io.Writer) io.Writer {
+func BatchWriter(w io.Writer) io.WriteCloser {
 	var (
 		b      = batcher{Writer: w}
 		ch     = make(chan CallbackMessage)
 		result = batchWriter{ch: ch}
 	)
 	go func() {
+		// Passing -1 here causes Consume() to wait forever (for either a
+		// message or the closing of the channel).
 		for b.Consume(ch, -1) == nil {
 		}
 	}()
@@ -46,4 +48,9 @@ func (w *batchWriter) Write(p []byte) (int, error) {
 	w.ch <- m
 	m.Wait()
 	return m.N, m.Err
+}
+
+func (w *batchWriter) Close() error {
+	close(w.ch)
+	return nil
 }

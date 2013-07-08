@@ -34,15 +34,12 @@ func (b *batcher) delay(m CallbackMessage) error {
 }
 
 func (b *batcher) flush() error {
+	defer func() {
+		b.buffer.Reset()
+		b.buffered = b.buffered[0:0]
+		b.indices = b.indices[0:0]
+	}()
 	if n, err := b.Writer.Write(b.buffer.Bytes()); err != nil {
-		defer func() {
-			for i, s := range b.indices {
-				if s > n {
-					b.buffered = b.buffered[i:]
-					break
-				}
-			}
-		}()
 		for i, m := range b.buffered {
 			if b.indices[i] <= n {
 				if i == 0 {
@@ -63,8 +60,6 @@ func (b *batcher) flush() error {
 		for i, m := range b.buffered {
 			m.Wrote(b.indices[i], nil)
 		}
-		b.buffered = b.buffered[0:0]
-		b.indices = b.indices[0:0]
 		return nil
 	}
 }
@@ -88,18 +83,17 @@ func (b *batcher) Consume(ch <-chan CallbackMessage, initialWait time.Duration) 
 		}
 	}
 	if ok {
-		b.delay(m)
-		for ok {
+		err = b.delay(m)
+		for ok && err == nil {
 			select {
 			case m, ok = <-ch:
 				if ok {
-					b.delay(m)
+					err = b.delay(m)
 				} else {
 					err = io.EOF
 				}
 			default:
 				ok = false
-				break
 			}
 		}
 		writerErr := b.flush()

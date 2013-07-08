@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"math"
+	"sync"
 	"testing"
 	"time"
 )
@@ -158,6 +159,7 @@ var batchWriteTests = []struct {
 	Limit    int
 }{
 	{[]string{"test"}, 1, 5},
+	{[]string{"test"}, 2, 15},
 	{[]string{"1", "2", "3", "4"}, 10, 80},
 }
 
@@ -165,31 +167,27 @@ func TestBatchWriter_Write(t *testing.T) {
 	for itest, test := range batchWriteTests {
 		writer := maxlengthWriter{MaxLength: test.Limit}
 		unit := BatchWriter(&writer)
-		done := make(chan bool)
 		var expected string
-		go func() {
-			for i := 0; i < test.Reps; i += 1 {
-				for _, s := range test.Messages {
-					expected += s
+		var wg sync.WaitGroup
+		for i := 0; i < test.Reps; i += 1 {
+			for _, s := range test.Messages {
+				expected += s
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
 					if _, err := unit.Write([]byte(s)); err != nil {
 						t.Errorf("%d: write returned error: %s", itest, err.Error())
-						return
 					}
-				}
+				}()
 			}
-			done <- true
-		}()
-		select {
-		case <-done:
-		case <-time.After(10 * time.Millisecond):
-			t.Errorf("%d: timed out while waiting for Write()", itest)
 		}
+		wg.Wait()
 		actual := string(writer.Buffer.Bytes())
-		if actual != expected {
-			t.Errorf("%d: expected %v, got %v", itest, expected, actual)
+		if len(actual) != len(expected) {
+			t.Errorf("%d: expected length %d, got %v", itest, len(expected), actual)
 		}
-		if writer.WriteCount != 1 {
-			t.Errorf("%d: writer.WriteCount == %d", itest, writer.WriteCount)
+		if writer.WriteCount != 1 && writer.WriteCount == test.Reps*len(test.Messages) {
+			t.Errorf("%d: writer.WriteCount is exactly %d", itest, writer.WriteCount)
 		}
 	}
 }
