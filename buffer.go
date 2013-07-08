@@ -3,35 +3,33 @@ package fio
 import (
 	"bytes"
 	"io"
-	"sync"
 	"time"
 )
 
-type batcher struct {
-	mutex    sync.Mutex
-	buffered []Frame
-	indices  []int
-	buffer   bytes.Buffer
-	Writer   io.Writer
+type buffer struct {
+	Writer  io.Writer
+	frames  []Frame
+	indices []int
+	raw     bytes.Buffer
 }
 
-func (b *batcher) delay(f Frame) error {
-	if err := f.WriteTo(&b.buffer); err != nil {
+func (b *buffer) delay(f Frame) error {
+	if err := f.WriteTo(&b.raw); err != nil {
 		return err
 	}
-	b.buffered = append(b.buffered, f)
-	b.indices = append(b.indices, b.buffer.Len())
+	b.frames = append(b.frames, f)
+	b.indices = append(b.indices, b.raw.Len())
 	return nil
 }
 
-func (b *batcher) flush() error {
+func (b *buffer) flush() error {
 	defer func() {
-		b.buffer.Reset()
-		b.buffered = b.buffered[0:0]
+		b.raw.Reset()
+		b.frames = b.frames[0:0]
 		b.indices = b.indices[0:0]
 	}()
-	if n, err := b.Writer.Write(b.buffer.Bytes()); err != nil {
-		for i, f := range b.buffered {
+	if n, err := b.Writer.Write(b.raw.Bytes()); err != nil {
+		for i, f := range b.frames {
 			if cb, ok := f.(*callback); ok {
 				if b.indices[i] <= n {
 					if i == 0 {
@@ -50,7 +48,7 @@ func (b *batcher) flush() error {
 		}
 		return err
 	} else {
-		for i, f := range b.buffered {
+		for i, f := range b.frames {
 			if cb, ok := f.(*callback); ok {
 				cb.C <- Wrote{b.indices[i], nil}
 			}
@@ -59,9 +57,7 @@ func (b *batcher) flush() error {
 	}
 }
 
-func (b *batcher) Consume(ch <-chan Frame, initialWait time.Duration) (err error) {
-	b.mutex.Lock()
-	defer b.mutex.Unlock()
+func (b *buffer) consume(ch <-chan Frame, initialWait time.Duration) (err error) {
 	var (
 		f  Frame
 		ok bool
