@@ -28,28 +28,28 @@ func (b *maxlengthWriter) Write(p []byte) (n int, err error) {
 }
 
 var batcherTests = []struct {
-	Messages []string
-	Limit    int
+	Frames []stringFrame
+	Limit  int
 }{
-	{[]string{"test"}, 0},
-	{[]string{"test"}, 5},
-	{[]string{"test", "test", "test"}, 15},
-	{[]string{"test", "test", "test"}, 10},
+	{[]stringFrame{"test"}, 0},
+	{[]stringFrame{"test"}, 5},
+	{[]stringFrame{"test", "test", "test"}, 15},
+	{[]stringFrame{"test", "test", "test"}, 10},
 }
 
 func TestBatcher(t *testing.T) {
 	for itest, test := range batcherTests {
-		var messages []*bytesMessage
-		for _, s := range test.Messages {
-			messages = append(messages, &bytesMessage{Bytes: []byte(s)})
+		written := make(chan Wrote, len(test.Frames))
+		var frames []Frame
+		for _, s := range test.Frames {
+			frames = append(frames, Callback(s, written))
 		}
 		totalbytes := 0
 		writer := &maxlengthWriter{MaxLength: test.Limit}
 		unit := batcher{Writer: writer}
-		for _, m := range messages {
-			totalbytes += len(m.Bytes)
-			m.Add(1)
-			unit.delay(m)
+		for _, f := range frames {
+			totalbytes += f.Len()
+			unit.delay(f)
 		}
 		if err := unit.flush(); err != nil {
 			if totalbytes <= test.Limit {
@@ -61,27 +61,21 @@ func TestBatcher(t *testing.T) {
 			}
 		}
 		bytecount := 0
-		for i, m := range messages {
-			done := make(chan bool)
-			go func() { m.Wait(); done <- true }()
-			bytecount += len(m.Bytes)
+		for i, f := range frames {
+			bytecount += f.Len()
+			var wrote Wrote
+			select {
+			case wrote = <-written:
+			case <-time.After(10 * time.Millisecond):
+				t.Errorf("%d: did not receive results: %d", itest, i)
+			}
 			if bytecount <= test.Limit {
-				select {
-				case <-done:
-					if m.Err != nil {
-						t.Errorf("%d: batcher called message[%d].Fail(%s)", itest, i, m.Err.Error())
-					}
-				case <-time.After(10 * time.Millisecond):
-					t.Errorf("%d: batcher did not call message[%d].Done()", itest, i)
+				if wrote.Err != nil {
+					t.Errorf("%d: error (frame %d?): %s", itest, i, wrote.Err.Error())
 				}
 			} else {
-				select {
-				case <-done:
-					if m.Err == nil {
-						t.Errorf("%d: batcher called message[%d].Done() instead of .Fail()", itest, i)
-					}
-				case <-time.After(10 * time.Millisecond):
-					t.Errorf("%d: batcher called message[%d].Done() nor .Fail()", itest, i)
+				if wrote.Err == nil {
+					t.Errorf("%d: batcher called frame[%d].Done() instead of .Fail()", itest, i)
 				}
 			}
 		}
@@ -92,52 +86,43 @@ func TestBatcher(t *testing.T) {
 }
 
 var batcherConsumeTests = []struct {
-	Messages []string
-	Limit    int
-	Close    bool
+	Frames []stringFrame
+	Limit  int
+	Close  bool
 }{
-	{[]string{"test"}, 0, false},
-	{[]string{"test"}, 5, false},
-	{[]string{"test", "test", "test"}, 15, false},
-	{[]string{"test", "test", "test"}, 10, false},
-	{[]string{"test", "test", "test"}, 15, true},
-	{[]string{"test", "test", "test"}, 10, true},
+	{[]stringFrame{"test"}, 0, false},
+	{[]stringFrame{"test"}, 5, false},
+	{[]stringFrame{"test", "test", "test"}, 15, false},
+	{[]stringFrame{"test", "test", "test"}, 10, false},
+	{[]stringFrame{"test", "test", "test"}, 15, true},
+	{[]stringFrame{"test", "test", "test"}, 10, true},
 }
 
 func TestBatcher_Consume(t *testing.T) {
 	for itest, test := range batcherConsumeTests {
 		var (
-			ch         = make(chan CallbackMessage, len(test.Messages))
+			ch         = make(chan Frame, len(test.Frames))
+			written    = make(chan Wrote, len(test.Frames))
 			writer     = &maxlengthWriter{MaxLength: test.Limit}
 			unit       = batcher{Writer: writer}
-			sent       []*bytesMessage
-			totalbytes = 0
+			sent       []Frame
+			totalbytes int
 		)
-		for _, s := range test.Messages {
-			m := &bytesMessage{Bytes: []byte(s)}
-			totalbytes += len(m.Bytes)
-			m.Add(1)
-			ch <- m
-			sent = append(sent, m)
+		for _, s := range test.Frames {
+			f := Callback(s, written)
+			totalbytes += f.Len()
+			ch <- f
+			sent = append(sent, f)
 		}
 		if test.Close {
 			close(ch)
 		}
-		done := make(chan error)
-		go func() {
-			for _, m := range sent {
-				m.Wait()
-			}
-			done <- nil
-		}()
 		var err error
 		go func() {
 			err = unit.Consume(ch, 0)
 		}()
-		select {
-		case <-done:
-		case <-time.After(10 * time.Millisecond):
-			t.Errorf("%d: timed out waiting on messages.", itest)
+		for _ = range sent {
+			<-written
 		}
 		if totalbytes > test.Limit {
 			if err == nil || err == io.EOF {
@@ -154,9 +139,9 @@ func TestBatcher_Consume(t *testing.T) {
 }
 
 var batchWriteTests = []struct {
-	Messages []string
-	Reps     int
-	Limit    int
+	Frames []string
+	Reps   int
+	Limit  int
 }{
 	{[]string{"test"}, 1, 5},
 	{[]string{"test"}, 2, 15},
@@ -166,11 +151,11 @@ var batchWriteTests = []struct {
 func TestBatchWriter_Write(t *testing.T) {
 	for itest, test := range batchWriteTests {
 		writer := maxlengthWriter{MaxLength: test.Limit}
-		unit := BatchWriter(&writer)
+		unit := Writer(&writer)
 		var expected string
 		var wg sync.WaitGroup
 		for i := 0; i < test.Reps; i += 1 {
-			for _, s := range test.Messages {
+			for _, s := range test.Frames {
 				expected += s
 				wg.Add(1)
 				go func() {
@@ -186,7 +171,7 @@ func TestBatchWriter_Write(t *testing.T) {
 		if len(actual) != len(expected) {
 			t.Errorf("%d: expected length %d, got %v", itest, len(expected), actual)
 		}
-		if writer.WriteCount != 1 && writer.WriteCount == test.Reps*len(test.Messages) {
+		if writer.WriteCount != 1 && writer.WriteCount == test.Reps*len(test.Frames) {
 			t.Errorf("%d: writer.WriteCount is exactly %d", itest, writer.WriteCount)
 		}
 	}
