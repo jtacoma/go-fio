@@ -16,25 +16,52 @@ package zio1
 
 import (
 	"bytes"
+	"encoding/hex"
+	"io"
 	"testing"
 
 	"github.com/jtacoma/go-fio"
 )
 
+type longBody struct {
+	Reps  int
+	Piece []byte
+}
+
+func (b longBody) Len() int {
+	return len(b.Piece) * b.Reps
+}
+
+func (b longBody) Read(buf []byte) (n int, err error) {
+	n = b.Len()
+	if len(buf) < n {
+		panic(io.ErrShortBuffer)
+	}
+	for i := 0; i < b.Reps; i += 1 {
+		copy(buf[i*len(b.Piece):(i+1)*len(b.Piece)], b.Piece)
+	}
+	err = io.EOF
+	return
+}
+
 var readFrameTests = []*ZFrame{
-	{false, fio.StringFrame("test")},
-	{true, fio.BytesFrame{}},
+	{0, fio.StringFrame("test")},
+	{More, fio.BytesFrame{}},
+	{0, longBody{255, []byte{0x00}}},
 }
 
 func TestZFrameReader_Read(t *testing.T) {
 	for itest, test := range readFrameTests {
-		var buffer bytes.Buffer
-		buffer.ReadFrom(test)
-		if frame, err := ReadZFrame(&buffer); err != nil {
+		t.Logf("%d: %x +%d bytes", itest, test.Flags, test.Body.Len())
+		raw := make([]byte, test.Len())
+		test.Read(raw)
+		buffer := bytes.NewBuffer(raw)
+		t.Logf("%d: x%s", itest, hex.EncodeToString(buffer.Bytes()))
+		if frame, err := ReadZFrame(buffer); err != nil {
 			t.Errorf("%d: ReadFrame: %s", itest, err.Error())
 		} else {
-			if frame.More != test.More {
-				t.Errorf("%d: ReadFrame returned More==%v", itest, frame.More)
+			if frame.Flags != test.Flags {
+				t.Errorf("%d: ReadFrame returned Flags==%x", itest, frame.Flags)
 			}
 			var testBuf, frameBuf bytes.Buffer
 			testBuf.ReadFrom(test.Body)

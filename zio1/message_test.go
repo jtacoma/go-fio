@@ -16,22 +16,22 @@ package zio1
 
 import (
 	"bytes"
+	"encoding/hex"
 	"testing"
 
 	"github.com/jtacoma/go-fio"
 )
 
-var readMessageTests = []*Message{
+var readMessageTests = []Message{
 	{[]fio.Frame{fio.StringFrame("test")}},
 	{[]fio.Frame{fio.BytesFrame{}}},
 }
 
 func TestReadMessage(t *testing.T) {
 	var buffer bytes.Buffer
-	for _, test := range readMessageTests {
-		buffer.ReadFrom(test)
-	}
 	for itest, test := range readMessageTests {
+		buffer.ReadFrom(&test)
+		t.Logf("%d: buffer: x%s", itest, hex.EncodeToString(buffer.Bytes()))
 		if message, err := ReadMessage(&buffer); err != nil {
 			t.Errorf("%d: ReadMessage: %s", itest, err.Error())
 		} else {

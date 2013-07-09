@@ -15,65 +15,83 @@
 package zio1
 
 import (
+	"encoding/binary"
 	"io"
 
 	"github.com/jtacoma/go-fio"
 )
 
+type Flags byte
+
 const (
-	flagsLen int = 1
-	shortLen     = 1
-	longLen      = 8
+	More Flags = 1 << iota
 )
 
+// A ZFrame is a Frame that consists of Flags and a Body.
+//
 type ZFrame struct {
-	More bool
-	Body fio.Frame
+	Flags Flags
+	Body  fio.Frame
 }
 
+// ReadZFrame reads one ZFrame from r or returns an error.
+//
 func ReadZFrame(r io.Reader) (f *ZFrame, err error) {
-	buf := make([]byte, 2)
+	buf := make([]byte, 1)
 	if _, err = io.ReadFull(r, buf); err != nil {
-	} else if buf[0] == 0xFF {
-		panic("long messages are not yet supported.")
-	} else if buf[1]|0x01 != 0x01 {
-		panic("unrecognized flags.")
+		return
+	} else if buf[0] < 0xFF {
+		buf = make([]byte, buf[0])
 	} else {
-		body := make([]byte, int(buf[0]))
-		if _, err = io.ReadFull(r, body); err == nil {
-			f = &ZFrame{
-				More: buf[1]&0x01 != 0,
-				Body: fio.BytesFrame(body),
-			}
+		buf = make([]byte, 8)
+		if _, err = io.ReadFull(r, buf); err != nil {
+			return
+		}
+		length := binary.BigEndian.Uint64(buf)
+		buf = make([]byte, length)
+	}
+	if _, err = io.ReadFull(r, buf); err == nil {
+		f = &ZFrame{
+			Flags: Flags(buf[0]),
+			Body:  fio.BytesFrame(buf[1:]),
 		}
 	}
 	return
 }
 
-func (f *ZFrame) Len() (length int) {
-	length = f.Body.Len()
+// Len returns the total number of bytes required to represent f.
+//
+// While ZMTP/1.0 defines a frame length as the length of Body + 1, for purposes
+// of integration with "fio" the Len() of a ZFrame adds to this the number of
+// bytes required to encode its length.
+//
+func (f ZFrame) Len() (length int) {
+	length = 1 + f.Body.Len()
 	if length < 255 {
-		length += shortLen + flagsLen
+		length += 2
 	} else {
-		length += longLen + flagsLen
+		length += 10
 	}
 	return
 }
 
-func (f *ZFrame) Read(buf []byte) (n int, err error) {
-	var flags byte
-	if f.More {
-		flags |= 0x01
-	}
-	bodylen := f.Body.Len()
-	if bodylen < 255 {
-		buf[0] = byte(bodylen)
-		buf[1] = flags
+// Read puts a representation of f, as Len() bytes, at the beginning of buf.
+//
+// Read will panic if buf is too small.
+//
+func (f ZFrame) Read(buf []byte) (n int, err error) {
+	length := 1 + uint64(f.Body.Len())
+	if length < 255 {
+		buf[0] = byte(length)
+		buf[1] = byte(f.Flags)
 		n, err = f.Body.Read(buf[2:])
 		n += 2
 	} else {
-		panic("long frames are not yet supported")
-		// TODO: write 0xFF 8-byte-length flags
+		buf[0] = 0xFF
+		binary.BigEndian.PutUint64(buf[1:9], length)
+		buf[10] = byte(f.Flags)
+		n, err = f.Body.Read(buf[11:])
+		n += 11
 	}
 	return
 }

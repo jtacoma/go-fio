@@ -14,23 +14,18 @@
 
 package zio1
 
-import (
-	"bytes"
-	"testing"
+type zerr int
 
-	"github.com/jtacoma/go-fio"
+const (
+	_ zerr = iota
+	EmptyMessage
 )
 
-func TestZConn(t *testing.T) {
-	a, b := Pipe()
-	go a.WriteZFrame(&ZFrame{
-		Body: fio.StringFrame("Hello, World!"),
-	})
-	var buf bytes.Buffer
-	m, _ := b.ReadMessage()
-	buf.ReadFrom(m.F[0])
-	s := string(buf.Bytes())
-	if s != "Hello, World!" {
-		t.Fatal("single-frame message was not received.")
+func (e zerr) Error() string {
+	switch e {
+	case EmptyMessage:
+		return "zio1: message has zero frames."
+	default:
+		panic("zio1: unknown error code.")
 	}
 }
