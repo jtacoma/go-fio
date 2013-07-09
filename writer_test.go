@@ -17,6 +17,7 @@
 package fio
 
 import (
+	"bytes"
 	"sync"
 	"testing"
 	"time"
@@ -66,5 +67,18 @@ func TestWriter_Write(t *testing.T) {
 		if performance < test.Performance {
 			t.Errorf("%d: averaged %f frames per write but expected %f", itest, performance, test.Performance)
 		}
+	}
+}
+
+func TestWriter_Close(t *testing.T) {
+	unit := NewWriter(&bytes.Buffer{})
+	if err := unit.Close(); err != nil {
+		t.Errorf("close an open writer: %s", err)
+	}
+	if err := unit.Close(); err != nil {
+		t.Errorf("close a closed writer: %s", err)
+	}
+	if _, err := unit.Write([]byte("what?")); err == nil {
+		t.Errorf("write on a closed writer: no error??")
 	}
 }

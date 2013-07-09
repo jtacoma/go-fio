@@ -68,7 +68,9 @@ func (w Writer) Write(p []byte) (int, error) {
 // Close closes the channel; not the underlying io.Writer.
 //
 func (w Writer) Close() error {
-	defer recover()
+	defer func() {
+		recover()
+	}()
 	close(w)
 	return nil
 }

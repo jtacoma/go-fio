@@ -105,16 +105,40 @@ func TestBatcher(t *testing.T) {
 }
 
 var bufferConsumeTests = []struct {
-	Frames []StringFrame
-	Limit  int
-	Close  bool
+	Frames      []StringFrame
+	Limit       int
+	CloseAt     int
+	InitialWait time.Duration
 }{
-	{[]StringFrame{"test"}, 0, false},
-	{[]StringFrame{"test"}, 5, false},
-	{[]StringFrame{"test", "test", "test"}, 15, false},
-	{[]StringFrame{"test", "test", "test"}, 10, false},
-	{[]StringFrame{"test", "test", "test"}, 15, true},
-	{[]StringFrame{"test", "test", "test"}, 10, true},
+	// Close an empty channel before passing it to consume:
+	{[]StringFrame{}, 1, 0, 0},
+
+	// Consume into a writer that will refuse all writes:
+	{[]StringFrame{"test"}, 0, 1, 0},
+
+	// Consume a single frame into a writer that will accept it, but
+	// don't close the channel:
+	{[]StringFrame{"test"}, 5, 1, 0},
+
+	// Consume a single frame into a writer that will accept it, close
+	// the channel, and wait forever:
+	{[]StringFrame{"test"}, 5, 0, -1},
+
+	// Consume multiple frames into a writer that will accept them but
+	// don't close the channel:
+	{[]StringFrame{"test", "test", "test"}, 15, 3, 0},
+
+	// Consume multiple frames into a writer that will accept only one
+	// and a half and don't close the channel:
+	{[]StringFrame{"test", "test", "test"}, 7, 3, 0},
+
+	// Consume multiple frames into a writer that will accept them and
+	// close the channel:
+	{[]StringFrame{"test", "test", "test"}, 15, 2, 0},
+
+	// Consume multiple frames into a writer that will accept only one
+	// and a half and close the channel:
+	{[]StringFrame{"test", "test", "test"}, 7, 2, 0},
 }
 
 func TestBatcher_Consume(t *testing.T) {
@@ -126,31 +150,42 @@ func TestBatcher_Consume(t *testing.T) {
 			unit       = buffer{Writer: writer}
 			sent       []Frame
 			totalbytes int
+			closed     bool
+			closedLate bool
 		)
-		for _, s := range test.Frames {
-			f := Callback(s, written)
-			totalbytes += f.Len()
-			ch <- f
-			sent = append(sent, f)
-		}
-		if test.Close {
+		if test.CloseAt == 0 {
+			t.Logf("%d: closing channel immediately.", itest)
+			closed = true
+			closedLate = totalbytes > test.Limit
 			close(ch)
 		}
-		var err error
-		go func() {
-			err = unit.consume(ch, 0)
-		}()
-		for _ = range sent {
-			<-written
+		for iframe, s := range test.Frames {
+			f := Callback(s, written)
+			totalbytes += f.Len()
+			if !closed {
+				ch <- f
+			}
+			if iframe+1 == test.CloseAt {
+				t.Logf("%d: closing channel after %d, totalbytes=%d", itest, iframe, totalbytes)
+				closed = true
+				closedLate = totalbytes > test.Limit
+				close(ch)
+			}
+			sent = append(sent, f)
 		}
-		if totalbytes > test.Limit {
+		err := unit.consume(ch, test.InitialWait)
+		if closed && !closedLate {
+			if err != io.EOF {
+				t.Errorf("%d: consume: expected io.EOF, got %v", itest, err)
+			}
+		} else if totalbytes > test.Limit {
 			if err == nil || err == io.EOF {
 				t.Errorf("%d: consume should've returned a non-EOF error.", itest)
 			}
 		} else if err != nil {
-			if test.Close && err != io.EOF {
+			if closed && err != io.EOF {
 				t.Errorf("%d: consume should've returned EOF: %s", itest, err.Error())
-			} else if !test.Close {
+			} else if !closed {
 				t.Errorf("%d: consume returned an error: %s", itest, err.Error())
 			}
 		}

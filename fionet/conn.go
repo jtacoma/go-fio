@@ -27,7 +27,6 @@ import (
 type FConn struct {
 	inner  net.Conn
 	writer fio.Writer
-	reader io.Reader
 }
 
 func NewFConn(c net.Conn) *FConn {
@@ -37,7 +36,6 @@ func NewFConn(c net.Conn) *FConn {
 	fconn := &FConn{
 		inner:  c,
 		writer: fio.NewWriter(c),
-		reader: fio.NewReader(c),
 	}
 	return fconn
 }
@@ -57,7 +55,7 @@ func (c *FConn) Close() error {
 	return c.inner.Close()
 }
 
-func (c *FConn) Read(b []byte) (n int, err error)  { return c.reader.Read(b) }
+func (c *FConn) Read(b []byte) (n int, err error)  { return io.ReadFull(c.inner, b) }
 func (c *FConn) Write(b []byte) (n int, err error) { return c.writer.Write(b) }
 
 func (c *FConn) LocalAddr() net.Addr                { return c.inner.LocalAddr() }

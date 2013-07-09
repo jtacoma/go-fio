@@ -78,6 +78,9 @@ func (b *buffer) consume(ch <-chan Frame, initialWait time.Duration) (err error)
 	)
 	if initialWait < 0 {
 		f, ok = <-ch
+		if !ok {
+			err = io.EOF
+		}
 	} else {
 		select {
 		case f, ok = <-ch:
