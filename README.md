@@ -3,7 +3,7 @@ fio
 
     go get github.com/jtacoma/go-fio
 
-This package also provides easy efficiency for high-frequency writing.  For example, the following code will result in a small number of large writes to `sys.Stdout` even though it makes a large number of small writes to `w`:
+This package provides easy efficiency for high-frequency writing.  For example, the following code will result in a small number of large writes to `sys.Stdout` even though it makes a large number of small writes to `w`:
 
     func main() {
         w := fio.NewWriter(sys.Stdout)
@@ -12,9 +12,9 @@ This package also provides easy efficiency for high-frequency writing.  For exam
         }
     }
 
-There some abstractions over the standard `"net"` package in the `"fionet"` subdirectory to support the use of this package in the implementation of custom protocols.
+There are some abstractions over the standard `"net"` package in the `"fionet"` subdirectory to support the use of this package in the implementation of custom protocols.
 
-As an example, the `"zio1"` subdirectory contains an implementation of the framing parts of [ZMTP/1.0](http://rfc.zeromq.org/spec:13).
+As an example, the `"zio1"` subdirectory contains an implementation of the framing layer of [ZMTP/1.0](http://rfc.zeromq.org/spec:13).
 
 License
 -------
