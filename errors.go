@@ -12,22 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fionet
+package fio
 
-import (
-	"testing"
+import "errors"
 
-	"github.com/jtacoma/go-fio"
+var (
+	ErrClosed        = errors.New("fio: send to closed sender")
+	ErrNegativeCount = errors.New("fio: negative count")
+	ErrTooLong       = errors.New("fio: frame too long")
+	ErrShortBuffer   = errors.New("fio: short buffer")
 )
-
-func TestFConn(t *testing.T) {
-	a, b := Pipe()
-	go a.WriteFrame(fio.StringFrame("One"))
-	go a.WriteFrame(fio.StringFrame("Two"))
-	buf := make([]byte, len([]byte("One")))
-	b.Read(buf)
-	s := string(buf)
-	if s != "One" {
-		t.Fatal("single-frame message was not received.")
-	}
-}
