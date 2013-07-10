@@ -5,7 +5,7 @@ fio
 
 This package provides a framing abstraction over the `"bufio"` package.
 
-    w := fio.NewSender(sys.Stdout, fio.Zio1)
+    w := fio.NewSender(bufio.NewWriter(sys.Stdout), fio.Zio1)
     for i := 0; i < 1000; i += 1 {
         w.Send([]byte("Hello, World!\n"))
     }
