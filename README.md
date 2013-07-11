@@ -1,16 +1,13 @@
 fio
 ===
 
-    go get github.com/jtacoma/go-fio
+This package provides an implementation of the framing layer of [ZMTP/1.0](http://rfc.zeromq.org/spec:13) as what has become an experiment in Go.
 
-This package provides a framing abstraction over the `"bufio"` package.
-
-    w := fio.NewSender(bufio.NewWriter(sys.Stdout), fio.Zio1)
-    for i := 0; i < 1000; i += 1 {
-        w.Send([]byte("Hello, World!\n"))
+    w := fio.NewZmtp1WriteFramer(sys.Stdout)
+    frame := []byte("Hello, World!\n")
+    if fw, err := w.WriteFrame(0, len(frame)); err == nil {
+        _, err = fw.Write(frame)
     }
-
-An implementation of the framing layer of [ZMTP/1.0](http://rfc.zeromq.org/spec:13) is included as reference implentation of the `fio.Encoding` interface.
 
 License
 -------
