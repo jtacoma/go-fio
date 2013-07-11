@@ -49,23 +49,23 @@ func NewZmtp1ReadFramer(r io.Reader) *Zmtp1ReadFramer {
 	return &Zmtp1ReadFramer{r}
 }
 
-func (z *Zmtp1ReadFramer) ReadFrame() (flags Flags, r io.Reader, err error) {
-	var length int64
+func (z *Zmtp1ReadFramer) ReadFrame() (flags Flags, length uint64, r io.Reader, err error) {
 	buf := make([]byte, 10)
 	if _, err = io.ReadFull(z.r, buf[:2]); err != nil {
 		return
 	}
 	if buf[0] < 0xFF {
-		length = int64(buf[0])
+		length = uint64(buf[0])
 		flags = Flags(buf[1])
 	} else {
 		if _, err = io.ReadFull(z.r, buf[2:]); err != nil {
 			return
 		}
-		length = int64(binary.BigEndian.Uint64(buf[1:9]))
+		length = binary.BigEndian.Uint64(buf[1:9])
 		flags = Flags(buf[9])
 	}
-	r = io.LimitReader(z.r, length-1)
+	length -= 1
+	r = io.LimitReader(z.r, int64(length)) // TODO: handle uint64
 	return
 }
 
@@ -73,8 +73,9 @@ func NewZmtp1WriteFramer(w io.Writer) *Zmtp1WriteFramer {
 	return &Zmtp1WriteFramer{w}
 }
 
-func (z *Zmtp1WriteFramer) WriteFrame(flags Flags, length uint64, r io.Reader) (err error) {
-	if length < 254 {
+func (z *Zmtp1WriteFramer) WriteFrame(flags Flags, length uint64) (w io.Writer, err error) {
+	length += 1
+	if length < 255 {
 		if _, err = z.w.Write([]byte{byte(length), byte(flags)}); err != nil {
 			return
 		}
@@ -83,12 +84,12 @@ func (z *Zmtp1WriteFramer) WriteFrame(flags Flags, length uint64, r io.Reader) (
 			return
 		}
 		longbuf := make([]byte, 8)
-		binary.BigEndian.PutUint64(longbuf, length)
+		binary.BigEndian.PutUint64(longbuf, uint64(length))
 		longbuf[9] = byte(flags)
 		if _, err = z.w.Write(longbuf); err != nil {
 			return
 		}
 	}
-	_, err = io.CopyN(z.w, r, int64(length-1)) // TODO: use uint64
+	w = z.w
 	return
 }
