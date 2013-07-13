@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fio
+package zio
 
 import (
 	"io"
@@ -20,14 +20,14 @@ import (
 	"testing"
 )
 
-func TestZmtp1ReadWriter(t *testing.T) {
+func TestZmtp1RecvSender(t *testing.T) {
 	var wg sync.WaitGroup
 	r, w := io.Pipe()
-	unit := NewZmtp1ReadWriteFramer(r, w)
+	unit := NewZmtp1FrameRecvSender(r, w)
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		flags, length, reader, err := unit.ReadFrame()
+		flags, length, reader, err := unit.RecvFrame()
 		if err != nil {
 			t.Errorf("ReadFrame: %s", err)
 		} else {
@@ -57,7 +57,7 @@ func TestZmtp1ReadWriter(t *testing.T) {
 		}()
 		f := []byte("test")
 		t.Logf("writing: %s", string(f))
-		if writer, err := unit.WriteFrame(0, uint64(len(f))); err != nil {
+		if writer, err := unit.SendFrame(0, uint64(len(f))); err != nil {
 			t.Fatalf("WriteFrame: %s", err)
 		} else if _, err = writer.Write(f); err != nil {
 			t.Fatalf("writer.Write: %s", err)
