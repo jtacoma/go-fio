@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package fio
-
-import "errors"
-
-var (
-	ErrLongWrite      = errors.New("fio: long write")
-	ErrNegativeLength = errors.New("fio: negative length")
-)
+// Package zio provides functions for ZMTP/1.0 compliant I/O.
+//
+// ZMTP/1.0 is defined here: http://rfc.zeromq.org/spec:13
+//
+// Because these functions wrap lower-level operations, unless otherwise
+// informed clients should not assume they are safe for parallel execution.
+//
+package zio

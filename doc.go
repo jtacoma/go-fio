@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Package fio provides functions for frame-based I/O.
+//
+// Because these functions wrap lower-level operations, unless otherwise
+// informed clients should not assume they are safe for parallel execution.
+//
 package fio
-
-import "errors"
-
-var (
-	ErrLongWrite      = errors.New("fio: long write")
-	ErrNegativeLength = errors.New("fio: negative length")
-)
