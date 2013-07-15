@@ -32,9 +32,6 @@ type LimitedWriter struct {
 // *LimitedWriter.
 //
 func LimitWriter(w io.Writer, n uint64) *LimitedWriter {
-	if n < 0 {
-		panic(ErrNegativeLength)
-	}
 	return &LimitedWriter{n, w}
 }
 
