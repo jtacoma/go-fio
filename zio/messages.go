@@ -54,7 +54,7 @@ func SendMsg(s FrameSender) *MsgSender {
 
 func (m *MsgSender) SendMsgFrame(more bool, length uint64) (w io.Writer, err error) {
 	if m.S == nil {
-		err = fio.ErrOverwrite
+		err = fio.ErrLongWrite
 	} else {
 		var flags Flags
 		if more {

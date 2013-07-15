@@ -1,8 +1,10 @@
-# fio
+# zio
 --
-    import "github.com/jtacoma/go-fio"
+    import "github.com/jtacoma/go-fio/zio"
 
-Package fio provides functions for frame-based I/O.
+Package zio provides functions for ZMTP/1.0 compliant I/O.
+
+ZMTP/1.0 is defined here: http://rfc.zeromq.org/spec:13
 
 Because these functions wrap lower-level operations, unless otherwise
 informed clients should not assume they are safe for parallel execution.

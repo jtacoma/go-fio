@@ -16,9 +16,18 @@ package zio
 
 import (
 	"io"
+	"os"
 	"sync"
 	"testing"
 )
+
+func ExampleZmtp1FrameSender() {
+	w := NewZmtp1FrameSender(os.Stdout)
+	frame := []byte("Hello, World!\n")
+	if fw, err := w.SendFrame(0, uint64(len(frame))); err == nil {
+		_, err = fw.Write(frame)
+	}
+}
 
 func TestZmtp1RecvSender(t *testing.T) {
 	var wg sync.WaitGroup
