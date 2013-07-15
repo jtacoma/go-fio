@@ -27,7 +27,7 @@ type LimitedWriter struct {
 	W io.Writer
 }
 
-// LimitWriter returns a Writer that writes to w but stops with ErrOverwrite
+// LimitWriter returns a Writer that writes to w but stops with ErrLongWrite
 // when greater than n bytes are written. The underlying implementation is a
 // *LimitedWriter.
 //
@@ -39,14 +39,17 @@ func LimitWriter(w io.Writer, n uint64) *LimitedWriter {
 }
 
 func (w *LimitedWriter) Write(p []byte) (n int, err error) {
-	if w.N == 0 || uint64(len(p)) > w.N {
+	if len(p) == 0 {
+		// no-op
+	} else if uint64(len(p)) > w.N {
 		n, err = w.W.Write(p[:w.N])
 		w.N -= uint64(n)
 		if err == nil {
-			err = ErrOverwrite
+			err = ErrLongWrite
 		}
 	} else {
 		n, err = w.W.Write(p)
+		w.N -= uint64(n)
 	}
 	return
 }

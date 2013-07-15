@@ -17,6 +17,6 @@ package fio
 import "errors"
 
 var (
-	ErrOverwrite      = errors.New("fio: overwrite")
+	ErrLongWrite      = errors.New("fio: long write")
 	ErrNegativeLength = errors.New("fio: negative length")
 )
